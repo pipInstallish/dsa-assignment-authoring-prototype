@@ -16,7 +16,9 @@ import {
   ChevronLeft,
   ChevronRight,
   BookMarked,
-  FolderOpen
+  FolderOpen,
+  MessageSquareCode,
+  Gauge
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -27,16 +29,30 @@ const TOP_LINKS = [
   { href: "/audit", icon: ScrollText, label: "Audit Log" },
 ];
 
-const DSA_LINKS = [
-  { href: "/categories/dsa", icon: LayoutDashboard, label: "DSA Home" },
+const DSA_HOME_LINK = { href: "/categories/dsa", icon: LayoutDashboard, label: "DSA Home" };
+
+const DSA_ASSIGNMENT_LINKS = [
   { href: "/categories/dsa/generate", icon: Sparkles, label: "Generate" },
   { href: "/categories/dsa/assignments", icon: FileCode2, label: "Assignments" },
+  { href: "/categories/dsa/sections", icon: Archive, label: "Sections" },
   { href: "/categories/dsa/gold-set", icon: BookMarked, label: "Gold Set" },
-  { href: "/categories/dsa/taxonomy", icon: GitBranch, label: "Taxonomy" },
-  { href: "/categories/dsa/corpus", icon: Database, label: "Corpus" },
   { href: "/categories/dsa/class-context", icon: FolderOpen, label: "Class Context" },
   { href: "/categories/dsa/prompts", icon: Layers, label: "Prompts" },
   { href: "/categories/dsa/evals", icon: FlaskConical, label: "Evals" },
+];
+
+const DSA_INTERVIEW_LINKS = [
+  { href: "/categories/dsa/interview/generate", icon: Sparkles, label: "Generate" },
+  { href: "/categories/dsa/interview/problems", icon: MessageSquareCode, label: "Problems" },
+  { href: "/categories/dsa/interview/gold-set", icon: BookMarked, label: "Gold Set" },
+  { href: "/categories/dsa/interview/calibration", icon: Gauge, label: "Calibration" },
+  { href: "/categories/dsa/interview/prompts", icon: Layers, label: "Prompts" },
+  { href: "/categories/dsa/interview/evals", icon: FlaskConical, label: "Evals" },
+];
+
+const DSA_SHARED_LINKS = [
+  { href: "/categories/dsa/taxonomy", icon: GitBranch, label: "Taxonomy" },
+  { href: "/categories/dsa/corpus", icon: Database, label: "Corpus" },
 ];
 
 interface NavItemProps {
@@ -48,11 +64,14 @@ interface NavItemProps {
 
 function NavItem({ href, icon: Icon, label, collapsed }: NavItemProps) {
   const pathname = usePathname();
-  // Exact match for "/" and "/categories/dsa"; prefix match for everything else
+  // Exact match for top-level roots; prefix match for everything else.
+  // Special-case: /categories/dsa/generate must not match /categories/dsa/interview/generate (different sub-tree).
   const isActive =
     href === "/" || href === "/categories/dsa"
       ? pathname === href
-      : pathname.startsWith(href);
+      : href === "/categories/dsa/generate"
+        ? pathname === href || pathname.startsWith(href + "/")
+        : pathname.startsWith(href);
 
   return (
     <Link
@@ -108,7 +127,35 @@ export function Sidebar() {
             <div className="h-px bg-border my-2" />
           )}
         </div>
-        {DSA_LINKS.map(link => (
+        <NavItem {...DSA_HOME_LINK} collapsed={collapsed} />
+
+        {/* Assignments sub-section */}
+        <div className={cn("mt-3 mb-1", !collapsed && "px-3")}>
+          {!collapsed && (
+            <p className="text-[10px] font-semibold text-neutral-600 uppercase tracking-wider">Assignments</p>
+          )}
+        </div>
+        {DSA_ASSIGNMENT_LINKS.map(link => (
+          <NavItem key={link.href} {...link} collapsed={collapsed} />
+        ))}
+
+        {/* Interview sub-section */}
+        <div className={cn("mt-3 mb-1", !collapsed && "px-3")}>
+          {!collapsed && (
+            <p className="text-[10px] font-semibold text-neutral-600 uppercase tracking-wider">Interview</p>
+          )}
+        </div>
+        {DSA_INTERVIEW_LINKS.map(link => (
+          <NavItem key={link.href} {...link} collapsed={collapsed} />
+        ))}
+
+        {/* Shared sub-section */}
+        <div className={cn("mt-3 mb-1", !collapsed && "px-3")}>
+          {!collapsed && (
+            <p className="text-[10px] font-semibold text-neutral-600 uppercase tracking-wider">Shared</p>
+          )}
+        </div>
+        {DSA_SHARED_LINKS.map(link => (
           <NavItem key={link.href} {...link} collapsed={collapsed} />
         ))}
 

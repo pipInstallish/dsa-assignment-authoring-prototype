@@ -277,6 +277,24 @@ export interface AssignmentRecord {
   allIterationAssignments?: GeneratedAssignment[];
 }
 
+// ---------- Assignment Sections (grouped problems for a class) ----------
+
+export type SectionType = "assignment" | "homework";
+
+export type SectionStatus = "drafting" | "awaiting_approval" | "approved" | "rejected";
+
+export interface AssignmentSection {
+  id: string;
+  name: string;
+  type: SectionType;
+  classContextId: string;
+  problems: AssignmentRecord[];
+  status: SectionStatus;
+  createdAt: string;
+  finalisedAt?: string;
+  approverNote?: string;
+}
+
 // ---------- Audit log ----------
 
 export interface AuditEntry {

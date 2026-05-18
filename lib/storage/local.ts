@@ -1,6 +1,6 @@
 "use client";
 
-import type { GoldSetEntry, ConceptProposal, ClassContext, InstructorReview, AssignmentRecord } from "../types";
+import type { GoldSetEntry, ConceptProposal, ClassContext, InstructorReview, AssignmentRecord, AssignmentSection } from "../types";
 
 const KEYS = {
   GOLD_SET_ENTRIES: "app:gold_set_entries",
@@ -9,6 +9,7 @@ const KEYS = {
   INSTRUCTOR_REVIEWS: "app:instructor_reviews",
   APPROVED_ASSIGNMENTS: "app:approved_assignments",
   PROMPT_PROPOSALS: "app:prompt_proposals",
+  ASSIGNMENT_SECTIONS: "app:assignment_sections",
 } as const;
 
 function safeGet<T>(key: string, fallback: T): T {
@@ -99,6 +100,21 @@ export function getPromptProposalStatuses(): Record<string, "pending" | "approve
 export function setPromptProposalStatus(id: string, status: "pending" | "approved" | "rejected"): void {
   const existing = getPromptProposalStatuses();
   safeSet(KEYS.PROMPT_PROPOSALS, { ...existing, [id]: status });
+}
+
+// Assignment sections (grouped problem sets for a class)
+export function getAssignmentSections(): AssignmentSection[] {
+  return safeGet<AssignmentSection[]>(KEYS.ASSIGNMENT_SECTIONS, []);
+}
+
+export function addAssignmentSection(section: AssignmentSection): void {
+  const existing = getAssignmentSections();
+  safeSet(KEYS.ASSIGNMENT_SECTIONS, [...existing, section]);
+}
+
+export function updateAssignmentSection(id: string, updates: Partial<AssignmentSection>): void {
+  const existing = getAssignmentSections();
+  safeSet(KEYS.ASSIGNMENT_SECTIONS, existing.map(s => s.id === id ? { ...s, ...updates } : s));
 }
 
 // Reset all user data

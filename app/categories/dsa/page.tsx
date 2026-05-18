@@ -1,21 +1,33 @@
 "use client";
 
 import Link from "next/link";
-import { Sparkles, FileCode2, BookMarked, GitBranch, Database, FolderOpen, Layers, FlaskConical } from "lucide-react";
+import { Sparkles, FileCode2, BookMarked, GitBranch, Database, FolderOpen, Layers, FlaskConical, MessageSquareCode, Gauge } from "lucide-react";
 import { DSA_ASSIGNMENTS } from "@/lib/seed/dsa";
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid
 } from "recharts";
 
-const TILES = [
+const ASSIGNMENT_TILES = [
   { href: "/categories/dsa/generate", icon: Sparkles, label: "Generate Assignment", desc: "Create a new DSA assignment", color: "indigo" },
   { href: "/categories/dsa/assignments", icon: FileCode2, label: "Assignments", desc: "Browse the assignment library", color: "neutral" },
   { href: "/categories/dsa/gold-set", icon: BookMarked, label: "Gold Set", desc: "Hand-authored exemplars", color: "neutral" },
-  { href: "/categories/dsa/taxonomy", icon: GitBranch, label: "Taxonomy", desc: "Manage concept hierarchy", color: "neutral" },
-  { href: "/categories/dsa/corpus", icon: Database, label: "Corpus", desc: "Interview question reference set", color: "neutral" },
   { href: "/categories/dsa/class-context", icon: FolderOpen, label: "Class Contexts", desc: "Curriculum module library", color: "neutral" },
   { href: "/categories/dsa/prompts", icon: Layers, label: "Prompts", desc: "Prompt version management", color: "neutral" },
   { href: "/categories/dsa/evals", icon: FlaskConical, label: "Eval Judge", desc: "Run and review evaluations", color: "neutral" },
+];
+
+const INTERVIEW_TILES = [
+  { href: "/categories/dsa/interview/generate", icon: Sparkles, label: "Generate Interview", desc: "Create a new interview problem", color: "violet" },
+  { href: "/categories/dsa/interview/problems", icon: MessageSquareCode, label: "Problems", desc: "Browse interview problem library", color: "neutral" },
+  { href: "/categories/dsa/interview/gold-set", icon: BookMarked, label: "Gold Set", desc: "Calibrated interview exemplars", color: "neutral" },
+  { href: "/categories/dsa/interview/calibration", icon: Gauge, label: "Calibration", desc: "Solve-rate data from deployments", color: "neutral" },
+  { href: "/categories/dsa/interview/prompts", icon: Layers, label: "Prompts", desc: "Interview generator prompts", color: "neutral" },
+  { href: "/categories/dsa/interview/evals", icon: FlaskConical, label: "Evals", desc: "Differentiation & leakage checks", color: "neutral" },
+];
+
+const SHARED_TILES = [
+  { href: "/categories/dsa/taxonomy", icon: GitBranch, label: "Taxonomy", desc: "Concept hierarchy (shared)", color: "neutral" },
+  { href: "/categories/dsa/corpus", icon: Database, label: "Corpus", desc: "Question reference set (shared)", color: "neutral" },
 ];
 
 // Mock chart data
@@ -66,23 +78,66 @@ export default function DSACategoryPage() {
           </div>
         </div>
 
-        {/* Nav tiles */}
-        <div className="grid grid-cols-4 gap-3 mb-8">
-          {TILES.map(tile => (
-            <Link
-              key={tile.href}
-              href={tile.href}
-              className={`p-4 rounded-lg border transition-all group ${
-                tile.color === "indigo"
-                  ? "border-indigo-500/40 bg-indigo-950/20 hover:border-indigo-500/60 hover:bg-indigo-950/30"
-                  : "border-white/8 bg-white/2 hover:border-white/20 hover:bg-white/4"
-              }`}
-            >
-              <tile.icon size={18} className={tile.color === "indigo" ? "text-indigo-400 mb-2" : "text-neutral-400 mb-2"} />
-              <p className="text-sm font-medium text-neutral-200">{tile.label}</p>
-              <p className="text-xs text-neutral-500 mt-0.5">{tile.desc}</p>
-            </Link>
-          ))}
+        {/* Assignments section */}
+        <div className="mb-6">
+          <p className="text-xs font-semibold text-neutral-500 uppercase tracking-wider mb-2">Assignments</p>
+          <div className="grid grid-cols-3 gap-3">
+            {ASSIGNMENT_TILES.map(tile => (
+              <Link
+                key={tile.href}
+                href={tile.href}
+                className={`p-4 rounded-lg border transition-all group ${
+                  tile.color === "indigo"
+                    ? "border-indigo-500/40 bg-indigo-950/20 hover:border-indigo-500/60 hover:bg-indigo-950/30"
+                    : "border-white/8 bg-white/2 hover:border-white/20 hover:bg-white/4"
+                }`}
+              >
+                <tile.icon size={18} className={tile.color === "indigo" ? "text-indigo-400 mb-2" : "text-neutral-400 mb-2"} />
+                <p className="text-sm font-medium text-neutral-200">{tile.label}</p>
+                <p className="text-xs text-neutral-500 mt-0.5">{tile.desc}</p>
+              </Link>
+            ))}
+          </div>
+        </div>
+
+        {/* Interview section */}
+        <div className="mb-6">
+          <p className="text-xs font-semibold text-neutral-500 uppercase tracking-wider mb-2">Interview</p>
+          <div className="grid grid-cols-3 gap-3">
+            {INTERVIEW_TILES.map(tile => (
+              <Link
+                key={tile.href}
+                href={tile.href}
+                className={`p-4 rounded-lg border transition-all group ${
+                  tile.color === "violet"
+                    ? "border-violet-500/40 bg-violet-950/20 hover:border-violet-500/60 hover:bg-violet-950/30"
+                    : "border-white/8 bg-white/2 hover:border-white/20 hover:bg-white/4"
+                }`}
+              >
+                <tile.icon size={18} className={tile.color === "violet" ? "text-violet-400 mb-2" : "text-neutral-400 mb-2"} />
+                <p className="text-sm font-medium text-neutral-200">{tile.label}</p>
+                <p className="text-xs text-neutral-500 mt-0.5">{tile.desc}</p>
+              </Link>
+            ))}
+          </div>
+        </div>
+
+        {/* Shared section */}
+        <div className="mb-8">
+          <p className="text-xs font-semibold text-neutral-500 uppercase tracking-wider mb-2">Shared</p>
+          <div className="grid grid-cols-3 gap-3">
+            {SHARED_TILES.map(tile => (
+              <Link
+                key={tile.href}
+                href={tile.href}
+                className="p-4 rounded-lg border border-white/8 bg-white/2 hover:border-white/20 hover:bg-white/4 transition-all group"
+              >
+                <tile.icon size={18} className="text-neutral-400 mb-2" />
+                <p className="text-sm font-medium text-neutral-200">{tile.label}</p>
+                <p className="text-xs text-neutral-500 mt-0.5">{tile.desc}</p>
+              </Link>
+            ))}
+          </div>
         </div>
 
         {/* Charts */}

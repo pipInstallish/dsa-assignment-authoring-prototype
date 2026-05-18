@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useRef } from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { DSA_CLASS_CONTEXTS, DSA_CONCEPTS } from "@/lib/seed/dsa";
 import { ConceptPicker } from "@/components/domain/ConceptPicker";
 import { AssignmentPreview } from "@/components/domain/AssignmentPreview";
@@ -12,14 +14,17 @@ import {
   mockRefineAssignment,
   GENERATION_STAGES,
 } from "@/lib/mock/llm";
-import { addUserApprovedAssignment } from "@/lib/storage/local";
+import { addUserApprovedAssignment, addAssignmentSection, updateAssignmentSection } from "@/lib/storage/local";
 import { toast } from "sonner";
 import {
-  Sparkles, Check, ChevronRight, Loader2, CheckCircle, XCircle, RefreshCw, AlertTriangle, ThumbsUp, ThumbsDown, MessageSquare
+  Sparkles, Check, ChevronRight, Loader2, CheckCircle, XCircle, RefreshCw, AlertTriangle, ThumbsUp, ThumbsDown, MessageSquare,
+  FileCode2, Archive, BookOpen, Plus, Minus, Send, X
 } from "lucide-react";
-import type { GeneratedAssignment, VerificationRun, EvalRun, AssignmentRecord } from "@/lib/types";
+import type { GeneratedAssignment, VerificationRun, EvalRun, AssignmentRecord, AssignmentSection, SectionType } from "@/lib/types";
 
 const STEPS = ["Configure", "Generating", "Review Output", "Approve"];
+
+type GenerateMode = "chooser" | "single" | "section";
 
 type FlowOutcome = "happy" | "refinement" | "hard_check_fail" | "code_execution_fail" | "max_iterations";
 
@@ -30,6 +35,17 @@ interface StageState {
 }
 
 export default function GeneratePage() {
+  const router = useRouter();
+
+  // ===== Mode + section state =====
+  const [mode, setMode] = useState<GenerateMode>("chooser");
+  const [sectionType, setSectionType] = useState<SectionType>("assignment");
+  const [sectionName, setSectionName] = useState("");
+  const [sectionSetupDone, setSectionSetupDone] = useState(false);
+  const sectionIdRef = useRef<string>(`sec_${Date.now()}`);
+  const [sectionProblems, setSectionProblems] = useState<AssignmentRecord[]>([]);
+  const [sectionFinalising, setSectionFinalising] = useState(false);
+
   const [step, setStep] = useState(0);
 
   // Step 0 config
@@ -156,11 +172,75 @@ export default function GeneratePage() {
       status: "approved",
       allIterationAssignments,
     };
-    addUserApprovedAssignment(record);
-    setApproveLoading(false);
-    setApproved(true);
-    setStep(3);
-    toast.success("Assignment approved and added to library");
+
+    if (mode === "section") {
+      // In section mode, accumulate problems locally. Save to library + section on finalise.
+      setSectionProblems(prev => [...prev, record]);
+      setApproveLoading(false);
+      setApproved(true);
+      setStep(3);
+      toast.success(`Problem ${sectionProblems.length + 1} added to section`);
+    } else {
+      addUserApprovedAssignment(record);
+      setApproveLoading(false);
+      setApproved(true);
+      setStep(3);
+      toast.success("Assignment approved and added to library");
+    }
+  }
+
+  // Reset per-problem state for a fresh problem within the same section
+  function startNewProblemInSection() {
+    setStep(0);
+    setAssignment(null);
+    setVerificationRun(null);
+    setEvalRun(null);
+    setRefinementCount(0);
+    setAllIterationAssignments([]);
+    setAllEvalRuns([]);
+    setPrimaryConcepts([]);
+    setSecondaryConcepts([]);
+    setMustNotConcepts([]);
+    setApproved(false);
+    setReviewComment("");
+    // Note: classContextId stays locked for the section. Domain/difficulty/type reset to defaults.
+    setDiffTier("medium");
+    setDomain("e-commerce");
+    setAssignmentType("coding_problem");
+  }
+
+  // Remove the most recently approved problem from the in-progress section
+  function removeLastSectionProblem() {
+    if (sectionProblems.length === 0) return;
+    setSectionProblems(prev => prev.slice(0, -1));
+    toast.info("Removed last problem from section");
+  }
+
+  async function handleFinaliseSection() {
+    if (sectionProblems.length === 0) {
+      toast.error("Add at least one problem before finalising");
+      return;
+    }
+    setSectionFinalising(true);
+    await new Promise(r => setTimeout(r, 600));
+
+    // Persist each approved problem to the library, then save the section bundle.
+    sectionProblems.forEach(p => addUserApprovedAssignment(p));
+
+    const section: AssignmentSection = {
+      id: sectionIdRef.current,
+      name: sectionName.trim(),
+      type: sectionType,
+      classContextId,
+      problems: sectionProblems,
+      status: "awaiting_approval",
+      createdAt: new Date().toISOString().slice(0, 10),
+      finalisedAt: new Date().toISOString().slice(0, 10),
+    };
+    addAssignmentSection(section);
+    setSectionFinalising(false);
+    toast.success(`Section "${sectionName}" sent to Shivank for approval`);
+    router.push("/categories/dsa/sections");
   }
 
   async function handleReject() {
@@ -186,16 +266,217 @@ export default function GeneratePage() {
 
   const canApprove = assignment && (flowOutcome === "happy" || flowOutcome === "refinement");
 
+  // ===== Mode chooser screen =====
+  if (mode === "chooser") {
+    const MODES = [
+      {
+        id: "single" as const,
+        icon: FileCode2,
+        label: "Single Problem",
+        desc: "Generate one assignment problem. Current flow — quick and focused.",
+        color: "indigo",
+      },
+      {
+        id: "section-assignment" as const,
+        icon: Archive,
+        label: "Assignment Section",
+        desc: "Build a set of problems for one class. Same flow per problem, then send as one bundle for approval.",
+        color: "violet",
+      },
+      {
+        id: "section-homework" as const,
+        icon: BookOpen,
+        label: "Homework Section",
+        desc: "Same as assignment section, mapped to homework for a class.",
+        color: "sky",
+      },
+    ];
+    return (
+      <div className="p-8 max-w-4xl mx-auto">
+        <div className="mb-6">
+          <div className="flex items-center gap-2 text-xs text-neutral-500 mb-2">
+            <Link href="/categories/dsa" className="hover:text-neutral-300">DSA</Link>
+            <span>/</span>
+            <span className="text-neutral-300">Generate</span>
+          </div>
+          <h1 className="text-2xl font-semibold text-neutral-100">What do you want to generate?</h1>
+          <p className="text-sm text-neutral-400 mt-1">Pick a mode. Single problem is the original flow. Sections let you build a bundle of problems for a class and send it for one consolidated approval.</p>
+        </div>
+        <div className="grid grid-cols-3 gap-3">
+          {MODES.map(m => (
+            <button
+              key={m.id}
+              onClick={() => {
+                if (m.id === "single") setMode("single");
+                else {
+                  setSectionType(m.id === "section-assignment" ? "assignment" : "homework");
+                  setMode("section");
+                }
+              }}
+              className={`p-5 rounded-lg border text-left transition-all ${
+                m.color === "indigo" ? "border-indigo-500/40 bg-indigo-950/20 hover:border-indigo-500/60 hover:bg-indigo-950/30" :
+                m.color === "violet" ? "border-violet-500/40 bg-violet-950/20 hover:border-violet-500/60 hover:bg-violet-950/30" :
+                "border-sky-500/40 bg-sky-950/20 hover:border-sky-500/60 hover:bg-sky-950/30"
+              }`}
+            >
+              <m.icon size={20} className={
+                m.color === "indigo" ? "text-indigo-400 mb-3" :
+                m.color === "violet" ? "text-violet-400 mb-3" :
+                "text-sky-400 mb-3"
+              } />
+              <p className="text-sm font-medium text-neutral-100 mb-1">{m.label}</p>
+              <p className="text-xs text-neutral-400 leading-relaxed">{m.desc}</p>
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // ===== Section setup screen (name + class context) =====
+  if (mode === "section" && !sectionSetupDone) {
+    const sectionLabel = sectionType === "assignment" ? "Assignment Section" : "Homework Section";
+    return (
+      <div className="p-8 max-w-2xl mx-auto">
+        <div className="mb-6">
+          <div className="flex items-center gap-2 text-xs text-neutral-500 mb-2">
+            <Link href="/categories/dsa" className="hover:text-neutral-300">DSA</Link>
+            <span>/</span>
+            <button onClick={() => setMode("chooser")} className="hover:text-neutral-300">Generate</button>
+            <span>/</span>
+            <span className="text-neutral-300">New {sectionLabel}</span>
+          </div>
+          <h1 className="text-2xl font-semibold text-neutral-100">New {sectionLabel}</h1>
+          <p className="text-sm text-neutral-400 mt-1">Name it and pick a class context. The class context is locked across all problems in this section.</p>
+        </div>
+        <div className="space-y-4 rounded-lg border border-white/8 bg-white/2 p-5">
+          <div>
+            <label className="text-xs text-neutral-400 mb-1.5 block">Section Name *</label>
+            <input
+              value={sectionName}
+              onChange={e => setSectionName(e.target.value)}
+              placeholder={sectionType === "assignment" ? "e.g. Week 5: Hashmaps & Frequency Counting" : "e.g. Homework 3: Sliding Window Practice"}
+              className="w-full bg-neutral-800 border border-white/10 rounded px-3 py-2 text-sm text-neutral-200 outline-none focus:border-indigo-500/60 placeholder:text-neutral-600"
+            />
+          </div>
+          <div>
+            <label className="text-xs text-neutral-400 mb-1.5 block">Class Context (locked for the whole section)</label>
+            <select
+              value={classContextId}
+              onChange={e => setClassContextId(e.target.value)}
+              className="w-full bg-neutral-800 border border-white/10 rounded px-3 py-2 text-sm text-neutral-300 outline-none focus:border-indigo-500/60"
+            >
+              {DSA_CLASS_CONTEXTS.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
+            </select>
+          </div>
+          <div className="flex items-center gap-3 pt-2">
+            <button
+              onClick={() => {
+                if (!sectionName.trim()) { toast.error("Name the section first"); return; }
+                setSectionSetupDone(true);
+              }}
+              className="px-4 py-2 rounded-md bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium transition-colors"
+            >
+              Start Adding Problems
+            </button>
+            <button
+              onClick={() => setMode("chooser")}
+              className="px-4 py-2 rounded-md border border-white/10 hover:border-white/20 text-neutral-300 text-sm transition-colors"
+            >
+              Back
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ===== Main per-problem flow (single mode OR active section) =====
+  const inSection = mode === "section" && sectionSetupDone;
+  const sectionLabel = sectionType === "assignment" ? "Assignment Section" : "Homework Section";
+  // Index of the in-progress problem within the section (0-based)
+  const activeProblemNumber = sectionProblems.length + (step === 3 ? 0 : 1);
+
   return (
     <div className="p-8 max-w-6xl mx-auto">
       <div className="mb-6">
         <div className="flex items-center gap-2 text-xs text-neutral-500 mb-2">
           <a href="/categories/dsa" className="hover:text-neutral-300">DSA</a>
           <span>/</span>
-          <span className="text-neutral-300">Generate Assignment</span>
+          {inSection ? (
+            <>
+              <button onClick={() => setMode("chooser")} className="hover:text-neutral-300">Generate</button>
+              <span>/</span>
+              <span className="text-neutral-300">{sectionName} ({sectionLabel})</span>
+            </>
+          ) : (
+            <span className="text-neutral-300">Generate Assignment</span>
+          )}
         </div>
-        <h1 className="text-2xl font-semibold text-neutral-100">Generate Assignment</h1>
+        <h1 className="text-2xl font-semibold text-neutral-100">
+          {inSection ? sectionName : "Generate Assignment"}
+        </h1>
+        {inSection && (
+          <p className="text-sm text-neutral-500 mt-1">
+            Problem {activeProblemNumber} · Class context locked: {DSA_CLASS_CONTEXTS.find(c => c.id === classContextId)?.title}
+          </p>
+        )}
       </div>
+
+      {/* Section mini nav */}
+      {inSection && (
+        <div className="flex items-center gap-2 mb-6 pb-4 border-b border-white/5 flex-wrap">
+          <span className="text-xs text-neutral-500 mr-1">Problems:</span>
+          {sectionProblems.map((p, i) => (
+            <div
+              key={i}
+              title={p.assignment.problem.title}
+              className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-emerald-900/20 border border-emerald-800/40 text-emerald-300 text-xs"
+            >
+              <Check size={10} />
+              {i + 1}
+            </div>
+          ))}
+          {/* Current in-progress slot */}
+          {step !== 3 && (
+            <div className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-indigo-900/20 border border-indigo-500/60 text-indigo-300 text-xs">
+              <Loader2 size={10} className={isGenerating || isRefining ? "animate-spin" : ""} />
+              {sectionProblems.length + 1}
+            </div>
+          )}
+          {/* + button only shown on the "approved" step so user can add another */}
+          {step === 3 && (
+            <button
+              onClick={startNewProblemInSection}
+              className="flex items-center gap-1 px-2.5 py-1 rounded-md border border-dashed border-white/15 hover:border-violet-500/60 hover:bg-violet-950/20 text-neutral-400 hover:text-violet-300 text-xs transition-colors"
+            >
+              <Plus size={11} />
+              Add Problem
+            </button>
+          )}
+          {/* − button to remove last approved (only useful after at least one approved) */}
+          {step === 3 && sectionProblems.length > 0 && (
+            <button
+              onClick={removeLastSectionProblem}
+              title="Remove the last approved problem from this section"
+              className="flex items-center gap-1 px-2 py-1 rounded-md border border-white/10 hover:border-rose-500/40 hover:bg-rose-950/20 text-neutral-500 hover:text-rose-300 text-xs transition-colors"
+            >
+              <Minus size={11} />
+            </button>
+          )}
+          {/* Finalise — always available once at least 1 problem is in */}
+          {sectionProblems.length > 0 && (
+            <button
+              onClick={handleFinaliseSection}
+              disabled={sectionFinalising}
+              className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white text-xs font-medium transition-colors"
+            >
+              {sectionFinalising ? <Loader2 size={11} className="animate-spin" /> : <Send size={11} />}
+              Finalise & Send to Shivank ({sectionProblems.length} problem{sectionProblems.length !== 1 ? "s" : ""})
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Step indicator */}
       <div className="flex items-center gap-3 mb-8">
@@ -233,10 +514,19 @@ export default function GeneratePage() {
           </div>
           <div className="space-y-5">
             <div>
-              <label className="text-xs text-neutral-400 mb-1.5 block">Class Context</label>
-              <select value={classContextId} onChange={e => setClassContextId(e.target.value)} className="w-full bg-neutral-800 border border-white/10 rounded px-3 py-2 text-sm text-neutral-300 outline-none focus:border-indigo-500/60">
-                {DSA_CLASS_CONTEXTS.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
-              </select>
+              <label className="text-xs text-neutral-400 mb-1.5 block">
+                Class Context
+                {inSection && <span className="ml-2 text-[10px] text-violet-400">locked for section</span>}
+              </label>
+              {inSection ? (
+                <div className="w-full bg-neutral-900/60 border border-white/8 rounded px-3 py-2 text-sm text-neutral-400">
+                  {DSA_CLASS_CONTEXTS.find(c => c.id === classContextId)?.title}
+                </div>
+              ) : (
+                <select value={classContextId} onChange={e => setClassContextId(e.target.value)} className="w-full bg-neutral-800 border border-white/10 rounded px-3 py-2 text-sm text-neutral-300 outline-none focus:border-indigo-500/60">
+                  {DSA_CLASS_CONTEXTS.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
+                </select>
+              )}
             </div>
             <div>
               <label className="text-xs text-neutral-400 mb-1.5 block">Difficulty</label>
@@ -437,7 +727,7 @@ export default function GeneratePage() {
       )}
 
       {/* Step 3: Approved */}
-      {step === 3 && (
+      {step === 3 && !inSection && (
         <div className="max-w-md mx-auto py-12 text-center">
           <div className="w-16 h-16 rounded-full bg-emerald-600/20 border border-emerald-500/40 flex items-center justify-center mx-auto mb-4">
             <CheckCircle size={28} className="text-emerald-400" />
@@ -465,6 +755,46 @@ export default function GeneratePage() {
               Generate Another
             </button>
           </div>
+        </div>
+      )}
+
+      {/* Step 3 in section mode: keep going or finalise */}
+      {step === 3 && inSection && (
+        <div className="max-w-xl mx-auto py-10 text-center">
+          <div className="w-14 h-14 rounded-full bg-emerald-600/20 border border-emerald-500/40 flex items-center justify-center mx-auto mb-3">
+            <CheckCircle size={24} className="text-emerald-400" />
+          </div>
+          <h2 className="text-lg font-semibold text-neutral-100 mb-1">
+            Problem {sectionProblems.length} added to section
+          </h2>
+          <p className="text-sm text-neutral-400 mb-2">{assignment?.problem.title}</p>
+          <p className="text-xs text-neutral-500 mb-6">
+            Section now has {sectionProblems.length} problem{sectionProblems.length !== 1 ? "s" : ""}. Add more or finalise the section to send for approval.
+          </p>
+          <div className="flex gap-2 justify-center">
+            <button
+              onClick={startNewProblemInSection}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-md bg-violet-600 hover:bg-violet-500 text-white text-sm font-medium transition-colors"
+            >
+              <Plus size={13} />
+              Add Another Problem
+            </button>
+            <button
+              onClick={handleFinaliseSection}
+              disabled={sectionFinalising}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-md bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white text-sm font-medium transition-colors"
+            >
+              {sectionFinalising ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
+              Finalise & Send to Shivank
+            </button>
+          </div>
+          <button
+            onClick={removeLastSectionProblem}
+            className="mt-4 flex items-center gap-1 mx-auto text-[11px] text-neutral-500 hover:text-rose-400 transition-colors"
+          >
+            <Minus size={10} />
+            Remove this problem from section
+          </button>
         </div>
       )}
     </div>
